@@ -1,0 +1,16 @@
+# compiled/generated files
+*.o
+*.0
+*.swp
+*.out
+*.vcd
+*.vmh
+
+# build directories
+build/
+tests/build/
+ubmark/build/
+
+# simulator binaries
+*-sim
+*-randdelay-sim
