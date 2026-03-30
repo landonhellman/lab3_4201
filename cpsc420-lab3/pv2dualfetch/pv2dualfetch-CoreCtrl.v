@@ -133,9 +133,9 @@ module parc_CoreCtrl
 
       bubble_Fhl <= bubble_next_Phl;
     end
-    else begin 
+    /* else begin 
       imemreq_val_Fhl <= imemreq_val_Phl;
-    end
+    end */
   end
 
   //----------------------------------------------------------------------
@@ -227,9 +227,16 @@ module parc_CoreCtrl
     if ( reset ) begin
       bubble_Dhl <= 1'b1;
       inst_sel_Dhl <= 1'b0;
+      ir0_Dhl      <= 32'b0; // NOP
+      ir1_Dhl      <= 32'b0; // NOP
     end
 
-    else if (brj_taken_Dhl && !inst_sel_Dhl) // if ir0 is a taken branch or jump, drop next ir1
+    else if ( squash_Dhl ) begin // branch/jump resolved in X0: squash D, reset inst_sel
+      bubble_Dhl   <= 1'b1;
+      inst_sel_Dhl <= 1'b0;
+    end
+
+    else if ( brj_taken_Dhl && !inst_sel_Dhl ) // if ir0 is a taken branch or jump, drop next ir1
       inst_sel_Dhl <= 1'b0; // reset to ir0, ignoring ir1 and going to next pair of insts
 
     else if( !stall_Dhl ) begin
@@ -786,11 +793,11 @@ module parc_CoreCtrl
 
   // Operand Mux Select
 
-  assign opA0_mux_sel_Dhl = cs0[`PARC_INST_MSG_OP0_SEL];
-  assign opA1_mux_sel_Dhl = cs0[`PARC_INST_MSG_OP1_SEL];
+  assign opA0_mux_sel_Dhl = cs_issue[`PARC_INST_MSG_OP0_SEL];
+  assign opA1_mux_sel_Dhl = cs_issue[`PARC_INST_MSG_OP1_SEL];
 
-  assign opB0_mux_sel_Dhl = cs1[`PARC_INST_MSG_OP0_SEL];
-  assign opB1_mux_sel_Dhl = cs1[`PARC_INST_MSG_OP1_SEL];
+  assign opB0_mux_sel_Dhl = cs_issue[`PARC_INST_MSG_OP0_SEL];
+  assign opB1_mux_sel_Dhl = cs_issue[`PARC_INST_MSG_OP1_SEL];
 
   // ALU Function
 
@@ -978,6 +985,8 @@ module parc_CoreCtrl
   always @ ( posedge clk ) begin
     if ( reset ) begin
       bubble_X0hl <= 1'b1;
+      rf0_wen_X0hl <= 1'b0;
+      rf0_waddr_X0hl <= 5'b0;
     end
     else if( !stall_X0hl ) begin
       ir0_X0hl              <= ir0_Dhl;
@@ -994,8 +1003,8 @@ module parc_CoreCtrl
       dmemreq_val_X0hl      <= dmemreq_val_Dhl;
       dmemresp_mux_sel_X0hl <= dmemresp_mux_sel_Dhl;
       memex_mux_sel_X0hl    <= memex_mux_sel_Dhl;
-      rf0_wen_X0hl          <= rf0_wen_Dhl;
-      rf0_waddr_X0hl        <= rf0_waddr_Dhl;
+      rf0_wen_X0hl          <= bubble_next_Dhl ? 1'b0 : rf0_wen_Dhl;
+      rf0_waddr_X0hl        <= bubble_next_Dhl ? 5'b0 : rf0_waddr_Dhl;
       cp0_wen_X0hl          <= cp0_wen_Dhl;
       cp0_addr_X0hl         <= cp0_addr_Dhl;
 
@@ -1079,6 +1088,8 @@ module parc_CoreCtrl
                        : ( bubble_sel_X0hl )  ? 1'b1
                        :                       1'bx;
 
+  assign aluA_fn_X0hl = alu0_fn_X0hl;
+
   //----------------------------------------------------------------------
   // X1 <- X0
   //----------------------------------------------------------------------
@@ -1108,6 +1119,9 @@ module parc_CoreCtrl
       dmemreq_val_X1hl <= 1'b0;
 
       bubble_X1hl <= 1'b1;
+
+      rf0_wen_X1hl <= 1'b0;
+      rf0_waddr_X1hl <= 5'b0;
     end
     else if( !stall_X1hl ) begin
       ir0_X1hl              <= ir0_X0hl;
@@ -1118,8 +1132,8 @@ module parc_CoreCtrl
       memex_mux_sel_X1hl    <= memex_mux_sel_X0hl;
       execute_mux_sel_X1hl  <= execute_mux_sel_X0hl;
       muldiv_mux_sel_X1hl   <= muldiv_mux_sel_X0hl;
-      rf0_wen_X1hl          <= rf0_wen_X0hl;
-      rf0_waddr_X1hl        <= rf0_waddr_X0hl;
+      rf0_wen_X1hl          <= bubble_next_X0hl ? 1'b0 : rf0_wen_X0hl;
+      rf0_waddr_X1hl        <= bubble_next_X0hl ? 5'b0 : rf0_waddr_X0hl;
       cp0_wen_X1hl          <= cp0_wen_X0hl;
       cp0_addr_X1hl         <= cp0_addr_X0hl;
 
@@ -1150,8 +1164,11 @@ module parc_CoreCtrl
   wire stall_dmem_X1hl
     = ( !reset && dmemreq_val_X1hl && inst_val_X1hl && !dmemresp_val && !dmemresp_queue_val_X1hl );
   wire stall_imem_X1hl
-    = ( !reset && imemreq_val_Fhl && inst_val_Fhl && !imemresp0_val && !imemresp0_queue_val_Fhl )
-   || ( !reset && imemreq_val_Fhl && inst_val_Fhl && !imemresp1_val && !imemresp1_queue_val_Fhl );
+  = !reset 
+  && imemreq_val_Fhl
+  && inst_val_Fhl 
+  && ( (!imemresp0_val && !imemresp0_queue_val_Fhl)
+    || (!imemresp1_val && !imemresp1_queue_val_Fhl) );
 
   // Aggregate Stall Signal
 
@@ -1188,13 +1205,16 @@ module parc_CoreCtrl
   always @ ( posedge clk ) begin
     if ( reset ) begin
       bubble_X2hl <= 1'b1;
+
+      rf0_wen_X2hl <= 1'b0;
+      rf0_waddr_X2hl <= 5'b0;
     end
     else if( !stall_X2hl ) begin
       ir0_X2hl              <= ir0_X1hl;
       is_muldiv_X2hl        <= is_muldiv_X1hl;
       muldiv_mux_sel_X2hl   <= muldiv_mux_sel_X1hl;
-      rf0_wen_X2hl          <= rf0_wen_X1hl;
-      rf0_waddr_X2hl        <= rf0_waddr_X1hl;
+      rf0_wen_X2hl          <= bubble_next_X1hl ? 1'b0 : rf0_wen_X1hl;
+      rf0_waddr_X2hl        <= bubble_next_X1hl ? 5'b0 : rf0_waddr_X1hl;
       cp0_wen_X2hl          <= cp0_wen_X1hl;
       cp0_addr_X2hl         <= cp0_addr_X1hl;
       execute_mux_sel_X2hl  <= execute_mux_sel_X1hl;
@@ -1250,13 +1270,16 @@ module parc_CoreCtrl
   always @ ( posedge clk ) begin
     if ( reset ) begin
       bubble_X3hl <= 1'b1;
+
+      rf0_wen_X3hl <= 1'b0;
+      rf0_waddr_X3hl <= 5'b0;
     end
     else if( !stall_X3hl ) begin
       ir0_X3hl              <= ir0_X2hl;
       is_muldiv_X3hl        <= is_muldiv_X2hl;
       muldiv_mux_sel_X3hl   <= muldiv_mux_sel_X2hl;
-      rf0_wen_X3hl          <= rf0_wen_X2hl;
-      rf0_waddr_X3hl        <= rf0_waddr_X2hl;
+      rf0_wen_X3hl          <= bubble_next_X3hl ? 1'b0 : rf0_wen_X3hl;
+      rf0_waddr_X3hl        <= bubble_next_X3hl ? 5'b0 : rf0_waddr_X3hl;
       cp0_wen_X3hl          <= cp0_wen_X2hl;
       cp0_addr_X3hl         <= cp0_addr_X2hl;
       execute_mux_sel_X3hl  <= execute_mux_sel_X2hl;
@@ -1308,11 +1331,14 @@ module parc_CoreCtrl
   always @ ( posedge clk ) begin
     if ( reset ) begin
       bubble_Whl <= 1'b1;
+
+      rf0_wen_Whl <= 1'b0;
+      rf0_waddr_Whl <= 5'b0;
     end
     else if( !stall_Whl ) begin
       ir0_Whl          <= ir0_X3hl;
-      rf0_wen_Whl      <= rf0_wen_X3hl;
-      rf0_waddr_Whl    <= rf0_waddr_X3hl;
+      rf0_wen_Whl          <= bubble_next_X3hl ? 1'b0 : rf0_wen_X3hl;
+      rf0_waddr_Whl        <= bubble_next_X3hl ? 5'b0 : rf0_waddr_X3hl;
       cp0_wen_Whl      <= cp0_wen_X3hl;
       cp0_addr_Whl     <= cp0_addr_X3hl;
 
