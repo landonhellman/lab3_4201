@@ -230,8 +230,9 @@ module parc_CoreCtrl
       ir1_Dhl      <= 32'b0; // NOP
     end
 
-    else if ( brj_taken_Dhl && steering_mux_sel == 1'b0 ) // if ir0 is a taken branch or jump, drop next ir1
+    else if ( brj_taken_Dhl && steering_mux_sel == 1'b0 ) begin // if ir0 is a taken branch or jump, drop next ir1
       ir1_Dhl <= 32'h00000000;
+    end
 
     else if( !stall_Dhl ) begin
       ir0_Dhl    <= imemresp0_queue_mux_out_Fhl;
@@ -585,7 +586,7 @@ module parc_CoreCtrl
   // Steering Logic
 
   // after issuing ir0, stall D to hold ir1 for the next cycle
-  wire stall_inst_Dhl = inst_val_Dhl && (steering_mux_sel == 1'b0) && !squash_Dhl;
+  wire stall_inst_Dhl = inst_val_Dhl && (steering_mux_sel == 1'b0) && !squash_Dhl && !brj_taken_Dhl;
 
   reg steering_mux_sel;
 
