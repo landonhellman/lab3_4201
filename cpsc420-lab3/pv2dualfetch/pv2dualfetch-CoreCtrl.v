@@ -625,188 +625,126 @@ module parc_CoreCtrl
   wire       rs1_en_Dhl    = cs1[`PARC_INST_MSG_RS_EN];
   wire       rt1_en_Dhl    = cs1[`PARC_INST_MSG_RT_EN];
 
-  // For Part 2 and Optionaly Part 1, replace the following control logic with a scoreboard
+  // scoreboard arrays
+  reg        sb_pending  [0:31];
+  reg  [4:0] sb_stage    [0:31];  // one-hot: X0=00001, X1=00010, X2=00100, X3=01000, W=10000
+  reg        sb_is_load  [0:31];
+  reg        sb_is_muldiv[0:31];
 
-  wire       rs0_AX0_byp_Dhl = rs0_en_Dhl
-                         && rfA_wen_X0hl
-                         && (rs0_addr_Dhl == rfA_waddr_X0hl)
-                         && !(rfA_waddr_X0hl == 5'd0)
-                         && inst_val_X0hl
-                         && !is_load_X0hl && !is_muldiv_X0hl;
+  integer sb_i;
+  always @(*) begin
+    for (sb_i = 0; sb_i < 32; sb_i = sb_i + 1) begin
+      sb_pending[sb_i]   = 1'b0;
+      sb_stage[sb_i]     = 5'b00000;
+      sb_is_load[sb_i]   = 1'b0;
+      sb_is_muldiv[sb_i] = 1'b0;
+    end
 
-  wire       rs0_AX1_byp_Dhl = rs0_en_Dhl
-                         && rfA_wen_X1hl
-                         && (rs0_addr_Dhl == rfA_waddr_X1hl)
-                         && !(rfA_waddr_X1hl == 5'd0)
-                         && inst_val_X1hl
-                         && !is_muldiv_X1hl;
+    if (inst_val_Whl && rfA_wen_Whl && rfA_waddr_Whl != 5'd0) begin
+      sb_pending  [rfA_waddr_Whl] = 1'b1;
+      sb_stage    [rfA_waddr_Whl] = 5'b10000;
+      sb_is_load  [rfA_waddr_Whl] = 1'b0;
+      sb_is_muldiv[rfA_waddr_Whl] = 1'b0;
+    end
+    if (inst_val_X3hl && rfA_wen_X3hl && rfA_waddr_X3hl != 5'd0) begin
+      sb_pending  [rfA_waddr_X3hl] = 1'b1;
+      sb_stage    [rfA_waddr_X3hl] = 5'b01000;
+      sb_is_load  [rfA_waddr_X3hl] = 1'b0;
+      sb_is_muldiv[rfA_waddr_X3hl] = 1'b0;
+    end
+    if (inst_val_X2hl && rfA_wen_X2hl && rfA_waddr_X2hl != 5'd0) begin
+      sb_pending  [rfA_waddr_X2hl] = 1'b1;
+      sb_stage    [rfA_waddr_X2hl] = 5'b00100;
+      sb_is_load  [rfA_waddr_X2hl] = 1'b0;
+      sb_is_muldiv[rfA_waddr_X2hl] = is_muldiv_X2hl;
+    end
+    if (inst_val_X1hl && rfA_wen_X1hl && rfA_waddr_X1hl != 5'd0) begin
+      sb_pending  [rfA_waddr_X1hl] = 1'b1;
+      sb_stage    [rfA_waddr_X1hl] = 5'b00010;
+      sb_is_load  [rfA_waddr_X1hl] = 1'b0;
+      sb_is_muldiv[rfA_waddr_X1hl] = is_muldiv_X1hl;
+    end
+    if (inst_val_X0hl && rfA_wen_X0hl && rfA_waddr_X0hl != 5'd0) begin
+      sb_pending  [rfA_waddr_X0hl] = 1'b1;
+      sb_stage    [rfA_waddr_X0hl] = 5'b00001;
+      sb_is_load  [rfA_waddr_X0hl] = is_load_X0hl;
+      sb_is_muldiv[rfA_waddr_X0hl] = is_muldiv_X0hl;
+    end
+  end
 
-  wire       rs0_AX2_byp_Dhl = rs0_en_Dhl
-                         && rfA_wen_X2hl
-                         && (rs0_addr_Dhl == rfA_waddr_X2hl)
-                         && !(rfA_waddr_X2hl == 5'd0)
-                         && inst_val_X2hl
-                         && !is_muldiv_X2hl;
+  wire [4:0] rs_issue = (steering_mux_sel == 1'b0) ? rs0 : rs1;
+  wire [4:0] rt_issue = (steering_mux_sel == 1'b0) ? rt0 : rt1;
+  wire       rs_en    = cs_issue[`PARC_INST_MSG_RS_EN];
+  wire       rt_en    = cs_issue[`PARC_INST_MSG_RT_EN];
 
-  wire       rs0_AX3_byp_Dhl = rs0_en_Dhl
-                         && rfA_wen_X3hl
-                         && (rs0_addr_Dhl == rfA_waddr_X3hl)
-                         && !(rfA_waddr_X3hl == 5'd0)
-                         && inst_val_X3hl;
+  reg [3:0] sb_opA0_byp_sel;
+  reg       sb_opA0_stall;
+  reg [3:0] sb_opA1_byp_sel;
+  reg       sb_opA1_stall;
 
-  wire       rs0_AW_byp_Dhl = rs0_en_Dhl
-                         && rfA_wen_Whl
-                         && (rs0_addr_Dhl == rfA_waddr_Whl)
-                         && !(rfA_waddr_Whl == 5'd0)
-                         && inst_val_Whl;
+  always @(*) begin
+    // defaults
+    sb_opA0_byp_sel = am_r0;
+    sb_opA0_stall   = 1'b0;
 
-  wire       rt0_AX0_byp_Dhl = rt0_en_Dhl
-                         && rfA_wen_X0hl
-                         && (rt0_addr_Dhl == rfA_waddr_X0hl)
-                         && !(rfA_waddr_X0hl == 5'd0)
-                         && inst_val_X0hl
-                         && !is_load_X0hl && !is_muldiv_X0hl;
+    if (rs_en && rs_issue != 5'd0 && sb_pending[rs_issue]) begin
+      case (sb_stage[rs_issue])
+        5'b00001: begin  // X0
+          if (sb_is_load[rs_issue] || sb_is_muldiv[rs_issue])
+            sb_opA0_stall = 1'b1;
+          else
+            sb_opA0_byp_sel = am_AX0_byp;
+        end
+        5'b00010: begin  // X1
+          if (sb_is_muldiv[rs_issue])
+            sb_opA0_stall = 1'b1;
+          else
+            sb_opA0_byp_sel = am_AX1_byp;
+        end
+        5'b00100: begin  // X2
+          if (sb_is_muldiv[rs_issue])
+            sb_opA0_stall = 1'b1;
+          else
+            sb_opA0_byp_sel = am_AX2_byp;
+        end
+        5'b01000: sb_opA0_byp_sel = am_AX3_byp;
+        5'b10000: sb_opA0_byp_sel = am_AW_byp;
+      endcase
+    end
+  end
 
-  wire       rt0_AX1_byp_Dhl = rt0_en_Dhl
-                         && rfA_wen_X1hl
-                         && (rt0_addr_Dhl == rfA_waddr_X1hl)
-                         && !(rfA_waddr_X1hl == 5'd0)
-                         && inst_val_X1hl
-                         && !is_muldiv_X1hl;
+  always @(*) begin
+    sb_opA1_byp_sel = bm_r1;
+    sb_opA1_stall   = 1'b0;
 
-  wire       rt0_AX2_byp_Dhl = rt0_en_Dhl
-                         && rfA_wen_X2hl
-                         && (rt0_addr_Dhl == rfA_waddr_X2hl)
-                         && !(rfA_waddr_X2hl == 5'd0)
-                         && inst_val_X2hl
-                         && !is_muldiv_X2hl;
+    if (rt_en && rt_issue != 5'd0 && sb_pending[rt_issue]) begin
+      case (sb_stage[rt_issue])
+        5'b00001: begin
+          if (sb_is_load[rt_issue] || sb_is_muldiv[rt_issue])
+            sb_opA1_stall = 1'b1;
+          else
+            sb_opA1_byp_sel = bm_AX0_byp;
+        end
+        5'b00010: begin
+          if (sb_is_muldiv[rt_issue])
+            sb_opA1_stall = 1'b1;
+          else
+            sb_opA1_byp_sel = bm_AX1_byp;
+        end
+        5'b00100: begin
+          if (sb_is_muldiv[rt_issue])
+            sb_opA1_stall = 1'b1;
+          else
+            sb_opA1_byp_sel = bm_AX2_byp;
+        end
+        5'b01000: sb_opA1_byp_sel = bm_AX3_byp;
+        5'b10000: sb_opA1_byp_sel = bm_AW_byp;
+      endcase
+    end
+  end
 
-  wire       rt0_AX3_byp_Dhl = rt0_en_Dhl
-                         && rfA_wen_X3hl
-                         && (rt0_addr_Dhl == rfA_waddr_X3hl)
-                         && !(rfA_waddr_X3hl == 5'd0)
-                         && inst_val_X3hl;
-
-  wire       rt0_AW_byp_Dhl = rt0_en_Dhl
-                         && rfA_wen_Whl
-                         && (rt0_addr_Dhl == rfA_waddr_Whl)
-                         && !(rfA_waddr_Whl == 5'd0)
-                         && inst_val_Whl;
-
-  wire       rs1_AX0_byp_Dhl = rs1_en_Dhl
-                         && rfA_wen_X0hl
-                         && (rs1_addr_Dhl == rfA_waddr_X0hl)
-                         && !(rfA_waddr_X0hl == 5'd0)
-                         && inst_val_X0hl
-                         && !is_load_X0hl && !is_muldiv_X0hl;
-
-  wire       rs1_AX1_byp_Dhl = rs1_en_Dhl
-                         && rfA_wen_X1hl
-                         && (rs1_addr_Dhl == rfA_waddr_X1hl)
-                         && !(rfA_waddr_X1hl == 5'd0)
-                         && inst_val_X1hl
-                         && !is_muldiv_X1hl;
-
-  wire       rs1_AX2_byp_Dhl = rs1_en_Dhl
-                         && rfA_wen_X2hl
-                         && (rs1_addr_Dhl == rfA_waddr_X2hl)
-                         && !(rfA_waddr_X2hl == 5'd0)
-                         && inst_val_X2hl
-                         && !is_muldiv_X2hl;
-
-  wire       rs1_AX3_byp_Dhl = rs1_en_Dhl
-                         && rfA_wen_X3hl
-                         && (rs1_addr_Dhl == rfA_waddr_X3hl)
-                         && !(rfA_waddr_X3hl == 5'd0)
-                         && inst_val_X3hl;
-
-  wire       rs1_AW_byp_Dhl = rs1_en_Dhl
-                         && rfA_wen_Whl
-                         && (rs1_addr_Dhl == rfA_waddr_Whl)
-                         && !(rfA_waddr_Whl == 5'd0)
-                         && inst_val_Whl;
-
-  wire       rt1_AX0_byp_Dhl = rt1_en_Dhl
-                         && rfA_wen_X0hl
-                         && (rt1_addr_Dhl == rfA_waddr_X0hl)
-                         && !(rfA_waddr_X0hl == 5'd0)
-                         && inst_val_X0hl
-                         && !is_load_X0hl && !is_muldiv_X0hl;
-
-  wire       rt1_AX1_byp_Dhl = rt1_en_Dhl
-                         && rfA_wen_X1hl
-                         && (rt1_addr_Dhl == rfA_waddr_X1hl)
-                         && !(rfA_waddr_X1hl == 5'd0)
-                         && inst_val_X1hl
-                         && !is_muldiv_X1hl;
-
-  wire       rt1_AX2_byp_Dhl = rt1_en_Dhl
-                         && rfA_wen_X2hl
-                         && (rt1_addr_Dhl == rfA_waddr_X2hl)
-                         && !(rfA_waddr_X2hl == 5'd0)
-                         && inst_val_X2hl
-                         && !is_muldiv_X2hl;
-
-  wire       rt1_AX3_byp_Dhl = rt1_en_Dhl
-                         && rfA_wen_X3hl
-                         && (rt1_addr_Dhl == rfA_waddr_X3hl)
-                         && !(rfA_waddr_X3hl == 5'd0)
-                         && inst_val_X3hl;
-
-  wire       rt1_AW_byp_Dhl = rt1_en_Dhl
-                         && rfA_wen_Whl
-                         && (rt1_addr_Dhl == rfA_waddr_Whl)
-                         && !(rfA_waddr_Whl == 5'd0)
-                         && inst_val_Whl;
-
-
-  // Operand Bypass Mux Select
-
-  assign opA0_byp_mux_sel_Dhl
-    = (steering_mux_sel == 1'b0)
-    ? ( (rs0_AX0_byp_Dhl) ? am_AX0_byp
-      : (rs0_AX1_byp_Dhl) ? am_AX1_byp
-      : (rs0_AX2_byp_Dhl) ? am_AX2_byp
-      : (rs0_AX3_byp_Dhl) ? am_AX3_byp
-      : (rs0_AW_byp_Dhl)  ? am_AW_byp
-      :                     am_r0 )
-    : ( (rs1_AX0_byp_Dhl) ? am_AX0_byp
-      : (rs1_AX1_byp_Dhl) ? am_AX1_byp
-      : (rs1_AX2_byp_Dhl) ? am_AX2_byp
-      : (rs1_AX3_byp_Dhl) ? am_AX3_byp
-      : (rs1_AW_byp_Dhl)  ? am_AW_byp
-      :                     am_r0 );
-
-  assign opA1_byp_mux_sel_Dhl
-    = (steering_mux_sel == 1'b0)
-    ? ( (rt0_AX0_byp_Dhl) ? bm_AX0_byp
-      : (rt0_AX1_byp_Dhl) ? bm_AX1_byp
-      : (rt0_AX2_byp_Dhl) ? bm_AX2_byp
-      : (rt0_AX3_byp_Dhl) ? bm_AX3_byp
-      : (rt0_AW_byp_Dhl)  ? bm_AW_byp
-      :                     bm_r1 )
-    : ( (rt1_AX0_byp_Dhl) ? bm_AX0_byp
-      : (rt1_AX1_byp_Dhl) ? bm_AX1_byp
-      : (rt1_AX2_byp_Dhl) ? bm_AX2_byp
-      : (rt1_AX3_byp_Dhl) ? bm_AX3_byp
-      : (rt1_AW_byp_Dhl)  ? bm_AW_byp
-      :                     bm_r1 );
-
-  assign opB0_byp_mux_sel_Dhl
-    = (rs1_AX0_byp_Dhl) ? am_AX0_byp
-    : (rs1_AX1_byp_Dhl) ? am_AX1_byp
-    : (rs1_AX2_byp_Dhl) ? am_AX2_byp
-    : (rs1_AX3_byp_Dhl) ? am_AX3_byp
-    : (rs1_AW_byp_Dhl) ? am_AW_byp
-    :                    am_r0;
-
-  assign opB1_byp_mux_sel_Dhl
-    = (rt1_AX0_byp_Dhl) ? bm_AX0_byp
-    : (rt1_AX1_byp_Dhl) ? bm_AX1_byp
-    : (rt1_AX2_byp_Dhl) ? bm_AX2_byp
-    : (rt1_AX3_byp_Dhl) ? bm_AX3_byp
-    : (rt1_AW_byp_Dhl) ? bm_AW_byp
-    :                    bm_r1;
+  assign opA0_byp_mux_sel_Dhl = sb_opA0_byp_sel;
+  assign opA1_byp_mux_sel_Dhl = sb_opA1_byp_sel;
 
   // Operand Mux Select
 
@@ -873,75 +811,9 @@ module parc_CoreCtrl
   // Squash instruction in D if a valid branch in X is taken
 
   wire squash_Dhl = ( inst_val_X0hl && brj_taken_X0hl );
-
-  // For Part 2 of this lab, replace the multdiv and ld stall logic with a scoreboard based stall logic
-
-  // Stall in D if muldiv unit is not ready and there is a valid request
   
-  wire stall_0_muldiv_use_Dhl = inst_val_Dhl && (
-                              ( inst_val_X0hl && rs0_en_Dhl && rfA_wen_X0hl
-                                && ( rs0_addr_Dhl == rfA_waddr_X0hl )
-                                && ( rfA_waddr_X0hl != 5'd0 ) && is_muldiv_X0hl )
-                           || ( inst_val_X1hl && rs0_en_Dhl && rfA_wen_X1hl
-                                && ( rs0_addr_Dhl == rfA_waddr_X1hl )
-                                && ( rfA_waddr_X1hl != 5'd0 ) && is_muldiv_X1hl )
-                           || ( inst_val_X2hl && rs0_en_Dhl && rfA_wen_X2hl
-                                && ( rs0_addr_Dhl == rfA_waddr_X2hl )
-                                && ( rfA_waddr_X2hl != 5'd0 ) && is_muldiv_X2hl )
-                           || ( inst_val_X0hl && rt0_en_Dhl && rfA_wen_X0hl
-                                && ( rt0_addr_Dhl == rfA_waddr_X0hl )
-                                && ( rfA_waddr_X0hl != 5'd0 ) && is_muldiv_X0hl )
-                           || ( inst_val_X1hl && rt0_en_Dhl && rfA_wen_X1hl
-                                && ( rt0_addr_Dhl == rfA_waddr_X1hl )
-                                && ( rfA_waddr_X1hl != 5'd0 ) && is_muldiv_X1hl )
-                           || ( inst_val_X2hl && rt0_en_Dhl && rfA_wen_X2hl
-                                && ( rt0_addr_Dhl == rfA_waddr_X2hl )
-                                && ( rfA_waddr_X2hl != 5'd0 ) && is_muldiv_X2hl ));
-  wire stall_1_muldiv_use_Dhl = inst_val_Dhl && (
-                              ( inst_val_X0hl && rs1_en_Dhl && rfA_wen_X0hl
-                                && ( rs1_addr_Dhl == rfA_waddr_X0hl )
-                                && ( rfA_waddr_X0hl != 5'd0 ) && is_muldiv_X0hl )
-                           || ( inst_val_X1hl && rs1_en_Dhl && rfA_wen_X1hl
-                                && ( rs1_addr_Dhl == rfA_waddr_X1hl )
-                                && ( rfA_waddr_X1hl != 5'd0 ) && is_muldiv_X1hl )
-                           || ( inst_val_X2hl && rs1_en_Dhl && rfA_wen_X2hl
-                                && ( rs1_addr_Dhl == rfA_waddr_X2hl )
-                                && ( rfA_waddr_X2hl != 5'd0 ) && is_muldiv_X2hl )
-                           || ( inst_val_X0hl && rt1_en_Dhl && rfA_wen_X0hl
-                                && ( rt1_addr_Dhl == rfA_waddr_X0hl )
-                                && ( rfA_waddr_X0hl != 5'd0 ) && is_muldiv_X0hl )
-                           || ( inst_val_X1hl && rt1_en_Dhl && rfA_wen_X1hl
-                                && ( rt1_addr_Dhl == rfA_waddr_X1hl )
-                                && ( rfA_waddr_X1hl != 5'd0 ) && is_muldiv_X1hl )
-                           || ( inst_val_X2hl && rt1_en_Dhl && rfA_wen_X2hl
-                                && ( rt1_addr_Dhl == rfA_waddr_X2hl )
-                                && ( rfA_waddr_X2hl != 5'd0 ) && is_muldiv_X2hl ));
-
-  // Stall for load-use only if instruction in D is valid and either of
-  // the source registers match the destination register of of a valid
-  // instruction in a later stage.
-
-  wire stall_0_load_use_Dhl = inst_val_Dhl && (
-                            ( inst_val_X0hl && rs0_en_Dhl && rfA_wen_X0hl
-                              && ( rs0_addr_Dhl == rfA_waddr_X0hl )
-                              && ( rfA_waddr_X0hl != 5'd0 ) && is_load_X0hl )
-                         || ( inst_val_X0hl && rt0_en_Dhl && rfA_wen_X0hl
-                              && ( rt0_addr_Dhl == rfA_waddr_X0hl )
-                              && ( rfA_waddr_X0hl != 5'd0 ) && is_load_X0hl ) );
-
-  wire stall_1_load_use_Dhl = inst_val_Dhl && (
-                            ( inst_val_X0hl && rs1_en_Dhl && rfA_wen_X0hl
-                              && ( rs1_addr_Dhl == rfA_waddr_X0hl )
-                              && ( rfA_waddr_X0hl != 5'd0 ) && is_load_X0hl )
-                         || ( inst_val_X0hl && rt1_en_Dhl && rfA_wen_X0hl
-                              && ( rt1_addr_Dhl == rfA_waddr_X0hl )
-                              && ( rfA_waddr_X0hl != 5'd0 ) && is_load_X0hl ) );
-
-    // Aggregate Stall Signal
-
-  wire stall_hazard_Dhl = (steering_mux_sel == 1'b0)
-    ? (stall_0_muldiv_use_Dhl || stall_0_load_use_Dhl)
-    : (stall_1_muldiv_use_Dhl || stall_1_load_use_Dhl);
+  // Aggregate Stall Signal
+  wire stall_hazard_Dhl = inst_val_Dhl && (sb_opA0_stall || sb_opA1_stall);
 
   wire stall_issue_Dhl = ( stall_X0hl || stall_hazard_Dhl );
   
