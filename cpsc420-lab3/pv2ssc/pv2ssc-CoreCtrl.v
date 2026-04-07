@@ -230,9 +230,17 @@ module parc_CoreCtrl
       ir1_Dhl      <= 32'b0; // NOP
     end
 
-    else if ( brj_taken_Dhl && steering_mux_sel == 1'b0 ) begin // if ir0 is a taken branch or jump, drop next ir1
-      ir1_Dhl <= 32'h00000000;
+    else if ( brj_taken_Dhl ) begin
+      bubble_Dhl <= 1'b1;
+      ir0_Dhl    <= 32'b0;
+      ir1_Dhl    <= 32'b0;
     end
+
+    else if ( hold_inst1_Dhl ) begin
+    bubble_Dhl <= 1'b0;
+    ir0_Dhl    <= ir1_Dhl;
+    ir1_Dhl    <= 32'b0;
+  end
 
     else if( !stall_Dhl ) begin
       ir0_Dhl    <= imemresp0_queue_mux_out_Fhl;
@@ -642,10 +650,10 @@ module parc_CoreCtrl
     if ( !inst0_valid_Dhl ) begin
       steering_mux_sel = 2'b10;
     end
-    else if ( inst0_valid_Dhl && inst1_valid_Dhl
-           && inst0_can_go_B && !inst1_can_go_B ) begin
-      steering_mux_sel = 2'b01;
-    end
+    // else if ( inst0_valid_Dhl && inst1_valid_Dhl
+    //        && inst0_can_go_B && !inst1_can_go_B ) begin
+    //   steering_mux_sel = 2'b01;
+    // end
     else if ( issue_pair_Dhl ) begin
       steering_mux_sel = 2'b00;
     end
