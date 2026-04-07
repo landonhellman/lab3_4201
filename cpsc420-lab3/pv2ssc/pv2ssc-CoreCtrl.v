@@ -969,6 +969,7 @@ module parc_CoreCtrl
   //----------------------------------------------------------------------
 
   reg [31:0] ir0_X0hl;
+  reg [31:0] ir1_X0hl;
   reg  [2:0] br_sel_X0hl;
   reg  [3:0] alu0_fn_X0hl;
   reg  [3:0] alu1_fn_X0hl;
@@ -985,6 +986,8 @@ module parc_CoreCtrl
   reg        memex_mux_sel_X0hl;
   reg        rf0_wen_X0hl;
   reg  [4:0] rf0_waddr_X0hl;
+  reg        rf1_wen_X0hl;
+  reg  [4:0] rf1_waddr_X0hl;
   reg        cp0_wen_X0hl;
   reg  [4:0] cp0_addr_X0hl;
 
@@ -1110,6 +1113,7 @@ module parc_CoreCtrl
   //----------------------------------------------------------------------
 
   reg [31:0] ir0_X1hl;
+  reg [31:0] ir1_X1hl;
   reg        is_load_X1hl;
   reg        is_muldiv_X1hl;
   reg        dmemreq_val_X1hl;
@@ -1119,6 +1123,8 @@ module parc_CoreCtrl
   reg        muldiv_mux_sel_X1hl;
   reg        rf0_wen_X1hl;
   reg  [4:0] rf0_waddr_X1hl;
+  reg        rf1_wen_X1hl;
+  reg  [4:0] rf1_waddr_X1hl;
   reg        cp0_wen_X1hl;
   reg  [4:0] cp0_addr_X1hl;
 
@@ -1137,6 +1143,9 @@ module parc_CoreCtrl
 
       rf0_wen_X1hl <= 1'b0;
       rf0_waddr_X1hl <= 5'b0;
+
+      rf1_wen_X1hl     <= 1'b0;
+      rf1_waddr_X1hl   <= 5'b0;
     end
     else if( !stall_X1hl ) begin
       ir0_X1hl              <= ir0_X0hl;
@@ -1149,6 +1158,8 @@ module parc_CoreCtrl
       muldiv_mux_sel_X1hl   <= muldiv_mux_sel_X0hl;
       rf0_wen_X1hl          <= rf0_wen_X0hl;
       rf0_waddr_X1hl        <= rf0_waddr_X0hl;
+      rf1_wen_X1hl          <= rf1_wen_X0hl;
+      rf1_waddr_X1hl        <= rf1_waddr_X0hl;
       cp0_wen_X1hl          <= cp0_wen_X0hl;
       cp0_addr_X1hl         <= cp0_addr_X0hl;
 
@@ -1198,10 +1209,13 @@ module parc_CoreCtrl
   //----------------------------------------------------------------------
 
   reg [31:0] ir0_X2hl;
+  reg [31:0] ir1_X2hl;
   reg        is_muldiv_X2hl;
   // reg        dmemresp_queue_val_X1hl;
   reg        rf0_wen_X2hl;
   reg  [4:0] rf0_waddr_X2hl;
+  reg        rf1_wen_X2hl;
+  reg  [4:0] rf1_waddr_X2hl;
   reg        cp0_wen_X2hl;
   reg  [4:0] cp0_addr_X2hl;
   reg        execute_mux_sel_X2hl;
@@ -1220,6 +1234,9 @@ module parc_CoreCtrl
 
       rf0_wen_X2hl <= 1'b0;
       rf0_waddr_X2hl <= 5'b0;
+
+      rf1_wen_X2hl   <= 1'b0;
+      rf1_waddr_X2hl <= 5'b0;
     end
     else if( !stall_X2hl ) begin
       ir0_X2hl              <= ir0_X1hl;
@@ -1227,6 +1244,8 @@ module parc_CoreCtrl
       muldiv_mux_sel_X2hl   <= muldiv_mux_sel_X1hl;
       rf0_wen_X2hl          <= rf0_wen_X1hl;
       rf0_waddr_X2hl        <= rf0_waddr_X1hl;
+      rf1_wen_X2hl          <= rf1_wen_X1hl;
+      rf1_waddr_X2hl        <= rf1_waddr_X1hl;
       cp0_wen_X2hl          <= cp0_wen_X1hl;
       cp0_addr_X2hl         <= cp0_addr_X1hl;
       execute_mux_sel_X2hl  <= execute_mux_sel_X1hl;
@@ -1264,9 +1283,12 @@ module parc_CoreCtrl
   //----------------------------------------------------------------------
 
   reg [31:0] ir0_X3hl;
+  reg [31:0] ir1_X3hl;
   reg        is_muldiv_X3hl;
   reg        rf0_wen_X3hl;
   reg  [4:0] rf0_waddr_X3hl;
+  reg        rf1_wen_X3hl;
+  reg  [4:0] rf1_waddr_X3hl;
   reg        cp0_wen_X3hl;
   reg  [4:0] cp0_addr_X3hl;
   // reg        execute_mux_sel_X3hl;
@@ -1292,6 +1314,8 @@ module parc_CoreCtrl
       muldiv_mux_sel_X3hl   <= muldiv_mux_sel_X2hl;
       rf0_wen_X3hl          <= rf0_wen_X2hl;
       rf0_waddr_X3hl        <= rf0_waddr_X2hl;
+      rf1_wen_X3hl          <= rf1_wen_X2hl;
+      rf1_waddr_X3hl        <= rf1_waddr_X2hl;
       cp0_wen_X3hl          <= cp0_wen_X2hl;
       cp0_addr_X3hl         <= cp0_addr_X2hl;
       execute_mux_sel_X3hl  <= execute_mux_sel_X2hl;
@@ -1328,8 +1352,11 @@ module parc_CoreCtrl
   //----------------------------------------------------------------------
 
   reg [31:0] ir0_Whl;
+  reg [31:0] ir1_Whl;
   reg        rf0_wen_Whl;
   reg  [4:0] rf0_waddr_Whl;
+  reg        rf1_wen_Whl;
+  reg  [4:0] rf1_waddr_Whl;
   reg        cp0_wen_Whl;
   reg  [4:0] cp0_addr_Whl;
 
@@ -1346,11 +1373,16 @@ module parc_CoreCtrl
 
       rf0_wen_Whl <= 1'b0;
       rf0_waddr_Whl <= 5'b0;
+
+      rf1_wen_Whl    <= 1'b0;
+      rf1_waddr_Whl  <= 5'b0;
     end
     else if( !stall_Whl ) begin
       ir0_Whl          <= ir0_X3hl;
       rf0_wen_Whl          <= bubble_next_X3hl ? 1'b0 : rf0_wen_X3hl;
       rf0_waddr_Whl        <= bubble_next_X3hl ? 5'b0 : rf0_waddr_X3hl;
+      rf1_wen_Whl          <= bubble_next_X3hl ? 1'b0 : rf1_wen_X3hl;
+      rf1_waddr_Whl        <= bubble_next_X3hl ? 5'b0 : rf1_waddr_X3hl;
       cp0_wen_Whl      <= cp0_wen_X3hl;
       cp0_addr_Whl     <= cp0_addr_X3hl;
 
@@ -1369,6 +1401,7 @@ module parc_CoreCtrl
   // Only set register file wen if stage is valid
 
   wire rf0_wen_out_Whl = ( inst_val_Whl && !stall_Whl && rf0_wen_Whl );
+  wire rf1_wen_out_Whl = ( inst_val_Whl && !stall_Whl && rf1_wen_Whl );
 
   // Dummy squash and stall signals
 
@@ -1376,9 +1409,9 @@ module parc_CoreCtrl
   assign stall_Whl  = 1'b0;
 
   assign rfA_wen_out_Whl = rf0_wen_out_Whl;
-  assign rfA_waddr_Whl   = rf0_waddr_Whl;
-  assign rfB_wen_out_Whl = 1'b0;
-  assign rfB_waddr_Whl   = 5'b0;
+  // assign rfA_waddr_Whl   = rf0_waddr_Whl;
+  assign rfB_wen_out_Whl = rf1_wen_out_Whl;
+  assign rfB_waddr_Whl   = rf1_waddr_Whl;
 
   //----------------------------------------------------------------------
   // Debug registers for instruction disassembly
@@ -1391,7 +1424,7 @@ module parc_CoreCtrl
   always @ ( posedge clk ) begin
     irA_debug       <= irA_Whl;
     inst_val_debug <= inst_val_Whl;
-    irB_debug       <= 32'b0; // FIXME!
+    irB_debug       <= irB_Whl;
   end
 
   //----------------------------------------------------------------------
@@ -1420,11 +1453,11 @@ module parc_CoreCtrl
   wire [31:0] irA_X2hl = ir0_X2hl;
   wire [31:0] irA_X3hl = ir0_X3hl;
   wire [31:0] irA_Whl  = ir0_Whl;
-  wire [31:0] irB_X0hl = 32'b0;
-  wire [31:0] irB_X1hl = 32'b0;
-  wire [31:0] irB_X2hl = 32'b0;
-  wire [31:0] irB_X3hl = 32'b0;
-  wire [31:0] irB_Whl  = 32'b0;
+  wire [31:0] irB_X0hl = ir1_X0hl;
+  wire [31:0] irB_X1hl = ir1_X1hl;
+  wire [31:0] irB_X2hl = ir1_X2hl;
+  wire [31:0] irB_X3hl = ir1_X3hl;
+  wire [31:0] irB_Whl  = ir1_Whl;
 
   `ifndef SYNTHESIS
 
