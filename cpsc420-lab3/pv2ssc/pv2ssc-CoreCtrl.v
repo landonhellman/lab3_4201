@@ -454,9 +454,6 @@ module parc_CoreCtrl
   reg [cs_sz-1:0] cs0;
   reg [cs_sz-1:0] cs1;
 
-  // use cs0 when issuing ir0, cs1 when issuing ir1
-  wire [cs_sz-1:0] cs_issue = (steering_mux_sel == 1'b1) ? cs1 : cs0;
-
   always @ (*) begin
 
     cs0 = {cs_sz{1'bx}}; // Default to invalid instruction
@@ -642,7 +639,6 @@ module parc_CoreCtrl
                      && inst1_can_go_B
                      && !pair_raw_hazard
                      && !pair_waw_hazard;
-
   
   reg [1:0] steering_mux_sel;
  
@@ -670,7 +666,7 @@ module parc_CoreCtrl
       ( steering_mux_sel == 2'b01 ) ? cs0 :
                                       {cs_sz{1'b0}};
  
-  wire issueA_val_Dhl = inst0_valid_Dhl;
+  wire issueA_val_Dhl = ( steering_mux_sel == 2'b01 ) ? inst0_valid_Dhl : inst1_valid_Dhl;
   wire issueB_val_Dhl = issue_pair_Dhl;
  
   assign instA_Dhl = issueA_val_Dhl ?
@@ -746,8 +742,8 @@ module parc_CoreCtrl
     end
   end
 
-  wire [4:0] rs_issue = (steering_mux_sel == 1'b0) ? rs0 : rs1;
-  wire [4:0] rt_issue = (steering_mux_sel == 1'b0) ? rt0 : rt1;
+  wire [4:0] rs_issue = ( steering_mux_sel == 2'b01 ) ? rs1 : rs0;
+  wire [4:0] rt_issue = ( steering_mux_sel == 2'b01 ) ? rt1 : rt0;
   wire       rs_en    = csA_issue_Dhl[`PARC_INST_MSG_RS_EN];
   wire       rt_en    = csA_issue_Dhl[`PARC_INST_MSG_RT_EN];
 
