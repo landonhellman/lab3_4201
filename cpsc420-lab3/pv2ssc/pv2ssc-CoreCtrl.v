@@ -700,6 +700,7 @@ module parc_CoreCtrl
   reg  [4:0] sb_stage    [0:31];  // one-hot: X0=00001, X1=00010, X2=00100, X3=01000, W=10000
   reg        sb_is_load  [0:31];
   reg        sb_is_muldiv[0:31];
+  reg        sb_pipe     [0:31];  // 0 = pipeline A, 1 = pipeline B
 
   integer sb_i;
   always @(*) begin
@@ -708,37 +709,93 @@ module parc_CoreCtrl
       sb_stage[sb_i]     = 5'b00000;
       sb_is_load[sb_i]   = 1'b0;
       sb_is_muldiv[sb_i] = 1'b0;
+      sb_pipe[sb_i]      = 1'b0;
     end
 
+    // Walk oldest -> youngest so that the youngest in-flight write
+    // (closest to D, i.e., X0) ends up overwriting older entries.
+    // Pipeline A and pipeline B at the same stage cannot collide on
+    // the same destination register because the steering logic stalls
+    // any pair with a WAW hazard.
+
+    // ---- W stage (oldest) ----
     if (inst_val_Whl && rfA_wen_Whl && rfA_waddr_Whl != 5'd0) begin
       sb_pending  [rfA_waddr_Whl] = 1'b1;
       sb_stage    [rfA_waddr_Whl] = 5'b10000;
       sb_is_load  [rfA_waddr_Whl] = 1'b0;
       sb_is_muldiv[rfA_waddr_Whl] = 1'b0;
+      sb_pipe     [rfA_waddr_Whl] = 1'b0;
     end
+    if (inst_val_Whl && rfB_wen_Whl && rfB_waddr_Whl_alias != 5'd0) begin
+      sb_pending  [rfB_waddr_Whl_alias] = 1'b1;
+      sb_stage    [rfB_waddr_Whl_alias] = 5'b10000;
+      sb_is_load  [rfB_waddr_Whl_alias] = 1'b0;
+      sb_is_muldiv[rfB_waddr_Whl_alias] = 1'b0;
+      sb_pipe     [rfB_waddr_Whl_alias] = 1'b1;
+    end
+
+    // ---- X3 stage ----
     if (inst_val_X3hl && rfA_wen_X3hl && rfA_waddr_X3hl != 5'd0) begin
       sb_pending  [rfA_waddr_X3hl] = 1'b1;
       sb_stage    [rfA_waddr_X3hl] = 5'b01000;
       sb_is_load  [rfA_waddr_X3hl] = 1'b0;
-      sb_is_muldiv[rfA_waddr_X3hl] = 1'b0;
+      sb_is_muldiv[rfA_waddr_X3hl] = is_muldiv_X3hl;
+      sb_pipe     [rfA_waddr_X3hl] = 1'b0;
     end
+    if (inst_val_X3hl && rfB_wen_X3hl && rfB_waddr_X3hl != 5'd0) begin
+      sb_pending  [rfB_waddr_X3hl] = 1'b1;
+      sb_stage    [rfB_waddr_X3hl] = 5'b01000;
+      sb_is_load  [rfB_waddr_X3hl] = 1'b0;
+      sb_is_muldiv[rfB_waddr_X3hl] = 1'b0;
+      sb_pipe     [rfB_waddr_X3hl] = 1'b1;
+    end
+
+    // ---- X2 stage ----
     if (inst_val_X2hl && rfA_wen_X2hl && rfA_waddr_X2hl != 5'd0) begin
       sb_pending  [rfA_waddr_X2hl] = 1'b1;
       sb_stage    [rfA_waddr_X2hl] = 5'b00100;
       sb_is_load  [rfA_waddr_X2hl] = 1'b0;
       sb_is_muldiv[rfA_waddr_X2hl] = is_muldiv_X2hl;
+      sb_pipe     [rfA_waddr_X2hl] = 1'b0;
     end
+    if (inst_val_X2hl && rfB_wen_X2hl && rfB_waddr_X2hl != 5'd0) begin
+      sb_pending  [rfB_waddr_X2hl] = 1'b1;
+      sb_stage    [rfB_waddr_X2hl] = 5'b00100;
+      sb_is_load  [rfB_waddr_X2hl] = 1'b0;
+      sb_is_muldiv[rfB_waddr_X2hl] = 1'b0;
+      sb_pipe     [rfB_waddr_X2hl] = 1'b1;
+    end
+
+    // ---- X1 stage ----
     if (inst_val_X1hl && rfA_wen_X1hl && rfA_waddr_X1hl != 5'd0) begin
       sb_pending  [rfA_waddr_X1hl] = 1'b1;
       sb_stage    [rfA_waddr_X1hl] = 5'b00010;
       sb_is_load  [rfA_waddr_X1hl] = 1'b0;
       sb_is_muldiv[rfA_waddr_X1hl] = is_muldiv_X1hl;
+      sb_pipe     [rfA_waddr_X1hl] = 1'b0;
     end
+    if (inst_val_X1hl && rfB_wen_X1hl && rfB_waddr_X1hl != 5'd0) begin
+      sb_pending  [rfB_waddr_X1hl] = 1'b1;
+      sb_stage    [rfB_waddr_X1hl] = 5'b00010;
+      sb_is_load  [rfB_waddr_X1hl] = 1'b0;
+      sb_is_muldiv[rfB_waddr_X1hl] = 1'b0;
+      sb_pipe     [rfB_waddr_X1hl] = 1'b1;
+    end
+
+    // ---- X0 stage (youngest) ----
     if (inst_val_X0hl && rfA_wen_X0hl && rfA_waddr_X0hl != 5'd0) begin
       sb_pending  [rfA_waddr_X0hl] = 1'b1;
       sb_stage    [rfA_waddr_X0hl] = 5'b00001;
       sb_is_load  [rfA_waddr_X0hl] = is_load_X0hl;
       sb_is_muldiv[rfA_waddr_X0hl] = is_muldiv_X0hl;
+      sb_pipe     [rfA_waddr_X0hl] = 1'b0;
+    end
+    if (inst_val_X0hl && rfB_wen_X0hl && rfB_waddr_X0hl != 5'd0) begin
+      sb_pending  [rfB_waddr_X0hl] = 1'b1;
+      sb_stage    [rfB_waddr_X0hl] = 5'b00001;
+      sb_is_load  [rfB_waddr_X0hl] = 1'b0;
+      sb_is_muldiv[rfB_waddr_X0hl] = 1'b0;
+      sb_pipe     [rfB_waddr_X0hl] = 1'b1;
     end
   end
 
@@ -763,22 +820,27 @@ module parc_CoreCtrl
           if (sb_is_load[rs_issue] || sb_is_muldiv[rs_issue])
             sb_opA0_stall = 1'b1;
           else
-            sb_opA0_byp_sel = am_AX0_byp;
+            sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BX0_byp : am_AX0_byp;
         end
         5'b00010: begin  // X1
           if (sb_is_muldiv[rs_issue])
             sb_opA0_stall = 1'b1;
           else
-            sb_opA0_byp_sel = am_AX1_byp;
+            sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BX1_byp : am_AX1_byp;
         end
         5'b00100: begin  // X2
           if (sb_is_muldiv[rs_issue])
             sb_opA0_stall = 1'b1;
           else
-            sb_opA0_byp_sel = am_AX2_byp;
+            sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BX2_byp : am_AX2_byp;
         end
-        5'b01000: sb_opA0_byp_sel = am_AX3_byp;
-        5'b10000: sb_opA0_byp_sel = am_AW_byp;
+        5'b01000: begin  // X3
+          if (sb_is_muldiv[rs_issue])
+            sb_opA0_stall = 1'b1;
+          else
+            sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BX3_byp : am_AX3_byp;
+        end
+        5'b10000: sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BW_byp : am_AW_byp;
       endcase
     end
   end
@@ -793,22 +855,27 @@ module parc_CoreCtrl
           if (sb_is_load[rt_issue] || sb_is_muldiv[rt_issue])
             sb_opA1_stall = 1'b1;
           else
-            sb_opA1_byp_sel = bm_AX0_byp;
+            sb_opA1_byp_sel = sb_pipe[rt_issue] ? bm_BX0_byp : bm_AX0_byp;
         end
         5'b00010: begin
           if (sb_is_muldiv[rt_issue])
             sb_opA1_stall = 1'b1;
           else
-            sb_opA1_byp_sel = bm_AX1_byp;
+            sb_opA1_byp_sel = sb_pipe[rt_issue] ? bm_BX1_byp : bm_AX1_byp;
         end
         5'b00100: begin
           if (sb_is_muldiv[rt_issue])
             sb_opA1_stall = 1'b1;
           else
-            sb_opA1_byp_sel = bm_AX2_byp;
+            sb_opA1_byp_sel = sb_pipe[rt_issue] ? bm_BX2_byp : bm_AX2_byp;
         end
-        5'b01000: sb_opA1_byp_sel = bm_AX3_byp;
-        5'b10000: sb_opA1_byp_sel = bm_AW_byp;
+        5'b01000: begin
+          if (sb_is_muldiv[rt_issue])
+            sb_opA1_stall = 1'b1;
+          else
+            sb_opA1_byp_sel = sb_pipe[rt_issue] ? bm_BX3_byp : bm_AX3_byp;
+        end
+        5'b10000: sb_opA1_byp_sel = sb_pipe[rt_issue] ? bm_BW_byp : bm_AW_byp;
       endcase
     end
   end
@@ -833,22 +900,27 @@ module parc_CoreCtrl
           if (sb_is_load[rsB_addr_Dhl] || sb_is_muldiv[rsB_addr_Dhl])
             sb_opB0_stall = 1'b1;
           else
-            sb_opB0_byp_sel = am_AX0_byp;
+            sb_opB0_byp_sel = sb_pipe[rsB_addr_Dhl] ? am_BX0_byp : am_AX0_byp;
         end
         5'b00010: begin
           if (sb_is_muldiv[rsB_addr_Dhl])
             sb_opB0_stall = 1'b1;
           else
-            sb_opB0_byp_sel = am_AX1_byp;
+            sb_opB0_byp_sel = sb_pipe[rsB_addr_Dhl] ? am_BX1_byp : am_AX1_byp;
         end
         5'b00100: begin
           if (sb_is_muldiv[rsB_addr_Dhl])
             sb_opB0_stall = 1'b1;
           else
-            sb_opB0_byp_sel = am_AX2_byp;
+            sb_opB0_byp_sel = sb_pipe[rsB_addr_Dhl] ? am_BX2_byp : am_AX2_byp;
         end
-        5'b01000: sb_opB0_byp_sel = am_AX3_byp;
-        5'b10000: sb_opB0_byp_sel = am_AW_byp;
+        5'b01000: begin
+          if (sb_is_muldiv[rsB_addr_Dhl])
+            sb_opB0_stall = 1'b1;
+          else
+            sb_opB0_byp_sel = sb_pipe[rsB_addr_Dhl] ? am_BX3_byp : am_AX3_byp;
+        end
+        5'b10000: sb_opB0_byp_sel = sb_pipe[rsB_addr_Dhl] ? am_BW_byp : am_AW_byp;
         default:  sb_opB0_byp_sel = am_r0;
       endcase
     end
@@ -864,22 +936,27 @@ module parc_CoreCtrl
           if (sb_is_load[rtB_addr_Dhl] || sb_is_muldiv[rtB_addr_Dhl])
             sb_opB1_stall = 1'b1;
           else
-            sb_opB1_byp_sel = bm_AX0_byp;
+            sb_opB1_byp_sel = sb_pipe[rtB_addr_Dhl] ? bm_BX0_byp : bm_AX0_byp;
         end
         5'b00010: begin
           if (sb_is_muldiv[rtB_addr_Dhl])
             sb_opB1_stall = 1'b1;
           else
-            sb_opB1_byp_sel = bm_AX1_byp;
+            sb_opB1_byp_sel = sb_pipe[rtB_addr_Dhl] ? bm_BX1_byp : bm_AX1_byp;
         end
         5'b00100: begin
           if (sb_is_muldiv[rtB_addr_Dhl])
             sb_opB1_stall = 1'b1;
           else
-            sb_opB1_byp_sel = bm_AX2_byp;
+            sb_opB1_byp_sel = sb_pipe[rtB_addr_Dhl] ? bm_BX2_byp : bm_AX2_byp;
         end
-        5'b01000: sb_opB1_byp_sel = bm_AX3_byp;
-        5'b10000: sb_opB1_byp_sel = bm_AW_byp;
+        5'b01000: begin
+          if (sb_is_muldiv[rtB_addr_Dhl])
+            sb_opB1_stall = 1'b1;
+          else
+            sb_opB1_byp_sel = sb_pipe[rtB_addr_Dhl] ? bm_BX3_byp : bm_AX3_byp;
+        end
+        5'b10000: sb_opB1_byp_sel = sb_pipe[rtB_addr_Dhl] ? bm_BW_byp : bm_AW_byp;
         default:  sb_opB1_byp_sel = bm_r1;
       endcase
     end
@@ -936,6 +1013,9 @@ module parc_CoreCtrl
 
   wire rf0_wen_Dhl         = csA_issue_Dhl[`PARC_INST_MSG_RF_WEN];
   wire [4:0] rf0_waddr_Dhl = csA_issue_Dhl[`PARC_INST_MSG_RF_WADDR];
+
+  wire       rf1_wen_Dhl   = issueB_val_Dhl && csB_issue_Dhl[`PARC_INST_MSG_RF_WEN];
+  wire [4:0] rf1_waddr_Dhl = csB_issue_Dhl[`PARC_INST_MSG_RF_WADDR];
 
   // Coprocessor write enable
 
@@ -999,6 +1079,8 @@ module parc_CoreCtrl
 
   wire       rfA_wen_X0hl   = rf0_wen_X0hl;
   wire [4:0] rfA_waddr_X0hl = rf0_waddr_X0hl;
+  wire       rfB_wen_X0hl   = rf1_wen_X0hl;
+  wire [4:0] rfB_waddr_X0hl = rf1_waddr_X0hl;
 
   // Pipeline Controls
 
@@ -1007,6 +1089,8 @@ module parc_CoreCtrl
       bubble_X0hl <= 1'b1;
       rf0_wen_X0hl <= 1'b0;
       rf0_waddr_X0hl <= 5'b0;
+      rf1_wen_X0hl <= 1'b0;
+      rf1_waddr_X0hl <= 5'b0;
     end
     else if( !stall_X0hl ) begin
       ir0_X0hl              <= ir0_Dhl;
@@ -1026,6 +1110,8 @@ module parc_CoreCtrl
       memex_mux_sel_X0hl    <= memex_mux_sel_Dhl;
       rf0_wen_X0hl          <= rf0_wen_Dhl;
       rf0_waddr_X0hl        <= rf0_waddr_Dhl;
+      rf1_wen_X0hl          <= rf1_wen_Dhl;
+      rf1_waddr_X0hl        <= rf1_waddr_Dhl;
       cp0_wen_X0hl          <= cp0_wen_Dhl;
       cp0_addr_X0hl         <= cp0_addr_Dhl;
 
@@ -1136,6 +1222,8 @@ module parc_CoreCtrl
 
   wire       rfA_wen_X1hl   = rf0_wen_X1hl;
   wire [4:0] rfA_waddr_X1hl = rf0_waddr_X1hl;
+  wire       rfB_wen_X1hl   = rf1_wen_X1hl;
+  wire [4:0] rfB_waddr_X1hl = rf1_waddr_X1hl;
 
   // Pipeline Controls
 
@@ -1229,6 +1317,8 @@ module parc_CoreCtrl
 
   wire       rfA_wen_X2hl   = rf0_wen_X2hl;
   wire [4:0] rfA_waddr_X2hl = rf0_waddr_X2hl;
+  wire       rfB_wen_X2hl   = rf1_wen_X2hl;
+  wire [4:0] rfB_waddr_X2hl = rf1_waddr_X2hl;
 
   // Pipeline Controls
 
@@ -1302,6 +1392,8 @@ module parc_CoreCtrl
 
   wire       rfA_wen_X3hl   = rf0_wen_X3hl;
   wire [4:0] rfA_waddr_X3hl = rf0_waddr_X3hl;
+  wire       rfB_wen_X3hl   = rf1_wen_X3hl;
+  wire [4:0] rfB_waddr_X3hl = rf1_waddr_X3hl;
 
   // Pipeline Controls
 
@@ -1311,6 +1403,8 @@ module parc_CoreCtrl
 
       rf0_wen_X3hl <= 1'b0;
       rf0_waddr_X3hl <= 5'b0;
+      rf1_wen_X3hl <= 1'b0;
+      rf1_waddr_X3hl <= 5'b0;
     end
     else if( !stall_X3hl ) begin
       ir0_X3hl              <= ir0_X2hl;
@@ -1368,6 +1462,8 @@ module parc_CoreCtrl
 
   wire       rfA_wen_Whl   = rf0_wen_Whl;
   assign rfA_waddr_Whl = rf0_waddr_Whl;
+  wire       rfB_wen_Whl   = rf1_wen_Whl;
+  wire [4:0] rfB_waddr_Whl_alias = rf1_waddr_Whl;
 
   // Pipeline Controls
 
@@ -1587,6 +1683,9 @@ module parc_CoreCtrl
 
         if ( inst_val_Dhl && !stall_Dhl ) begin
           num_inst = num_inst + 1;
+          if ( issueB_val_Dhl ) begin
+            num_inst = num_inst + 1;
+          end
         end
 
       end
