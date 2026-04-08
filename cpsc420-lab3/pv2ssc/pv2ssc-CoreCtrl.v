@@ -598,13 +598,9 @@ module parc_CoreCtrl
   wire inst0_is_muldiv = cs0[`PARC_INST_MSG_MULDIV_EN];
   wire inst1_is_muldiv = cs1[`PARC_INST_MSG_MULDIV_EN];
 
-  wire inst0_is_ctrl   = (cs0[`PARC_INST_MSG_PC_SEL] != pm_p) ||
-                        (cs0[`PARC_INST_MSG_BR_SEL] != br_none) ||
-                        cs0[`PARC_INST_MSG_J_EN];
+  wire inst0_is_ctrl = (cs0[`PARC_INST_MSG_PC_SEL] != pm_p) || (cs0[`PARC_INST_MSG_BR_SEL] != br_none) || cs0[`PARC_INST_MSG_J_EN];
 
-  wire inst1_is_ctrl   = (cs1[`PARC_INST_MSG_PC_SEL] != pm_p) ||
-                        (cs1[`PARC_INST_MSG_BR_SEL] != br_none) ||
-                        cs1[`PARC_INST_MSG_J_EN];
+  wire inst1_is_ctrl = (cs1[`PARC_INST_MSG_PC_SEL] != pm_p) || (cs1[`PARC_INST_MSG_BR_SEL] != br_none) || cs1[`PARC_INST_MSG_J_EN];
 
   wire inst0_can_go_B = inst0_valid_Dhl && !inst0_is_mem && !inst0_is_muldiv && !inst0_is_ctrl;
   wire inst1_can_go_B = inst1_valid_Dhl && !inst1_is_mem && !inst1_is_muldiv && !inst1_is_ctrl;
@@ -658,24 +654,16 @@ module parc_CoreCtrl
     end
   end
 
-  wire [cs_sz-1:0] csA_issue_Dhl =
-      ( steering_mux_sel == 2'b01 ) ? cs1 : cs0;
+  wire [cs_sz-1:0] csA_issue_Dhl = ( steering_mux_sel == 2'b01 ) ? cs1 : cs0;
  
-  wire [cs_sz-1:0] csB_issue_Dhl =
-      ( steering_mux_sel == 2'b00 ) ? cs1 :
-      ( steering_mux_sel == 2'b01 ) ? cs0 :
-                                      {cs_sz{1'b0}};
+  wire [cs_sz-1:0] csB_issue_Dhl = ( steering_mux_sel == 2'b00 ) ? cs1 : ( steering_mux_sel == 2'b01 ) ? cs0 : {cs_sz{1'b0}};
  
-  wire issueA_val_Dhl = ( steering_mux_sel == 2'b01 ) ? inst0_valid_Dhl : inst1_valid_Dhl;
+  wire issueA_val_Dhl = ( steering_mux_sel == 2'b01 ) ? inst1_valid_Dhl : inst0_valid_Dhl;
   wire issueB_val_Dhl = issue_pair_Dhl;
  
-  assign instA_Dhl = issueA_val_Dhl ?
-                       ( (steering_mux_sel == 2'b01) ? ir1_Dhl : ir0_Dhl )
-                     : 32'b0;
+  assign instA_Dhl = issueA_val_Dhl ? ( (steering_mux_sel == 2'b01) ? ir1_Dhl : ir0_Dhl ) : 32'b0;
  
-  assign instB_Dhl = issueB_val_Dhl ?
-                       ( (steering_mux_sel == 2'b01) ? ir0_Dhl : ir1_Dhl )
-                     : 32'b0;
+  assign instB_Dhl = issueB_val_Dhl ? ( (steering_mux_sel == 2'b01) ? ir0_Dhl : ir1_Dhl ) : 32'b0;
 
   // after issuing ir0, stall D to hold ir1 for the next cycle
 
@@ -691,9 +679,6 @@ module parc_CoreCtrl
 
   wire [1:0] pc_mux_sel_Dhl = csA_issue_Dhl[`PARC_INST_MSG_PC_SEL];
   assign pc_offset_mux_sel_Dhl = (steering_mux_sel == 2'b01);
-
-  // Operand Bypassing Logic
-
 
   // scoreboard arrays
   reg        sb_pending  [0:31];
@@ -712,13 +697,6 @@ module parc_CoreCtrl
       sb_pipe[sb_i]      = 1'b0;
     end
 
-    // Walk oldest -> youngest so that the youngest in-flight write
-    // (closest to D, i.e., X0) ends up overwriting older entries.
-    // Pipeline A and pipeline B at the same stage cannot collide on
-    // the same destination register because the steering logic stalls
-    // any pair with a WAW hazard.
-
-    // ---- W stage (oldest) ----
     if (inst_val_Whl && rfA_wen_Whl && rfA_waddr_Whl != 5'd0) begin
       sb_pending  [rfA_waddr_Whl] = 1'b1;
       sb_stage    [rfA_waddr_Whl] = 5'b10000;
@@ -734,7 +712,6 @@ module parc_CoreCtrl
       sb_pipe     [rfB_waddr_Whl_alias] = 1'b1;
     end
 
-    // ---- X3 stage ----
     if (inst_val_X3hl && rfA_wen_X3hl && rfA_waddr_X3hl != 5'd0) begin
       sb_pending  [rfA_waddr_X3hl] = 1'b1;
       sb_stage    [rfA_waddr_X3hl] = 5'b01000;
@@ -750,7 +727,6 @@ module parc_CoreCtrl
       sb_pipe     [rfB_waddr_X3hl] = 1'b1;
     end
 
-    // ---- X2 stage ----
     if (inst_val_X2hl && rfA_wen_X2hl && rfA_waddr_X2hl != 5'd0) begin
       sb_pending  [rfA_waddr_X2hl] = 1'b1;
       sb_stage    [rfA_waddr_X2hl] = 5'b00100;
@@ -766,7 +742,6 @@ module parc_CoreCtrl
       sb_pipe     [rfB_waddr_X2hl] = 1'b1;
     end
 
-    // ---- X1 stage ----
     if (inst_val_X1hl && rfA_wen_X1hl && rfA_waddr_X1hl != 5'd0) begin
       sb_pending  [rfA_waddr_X1hl] = 1'b1;
       sb_stage    [rfA_waddr_X1hl] = 5'b00010;
@@ -782,7 +757,6 @@ module parc_CoreCtrl
       sb_pipe     [rfB_waddr_X1hl] = 1'b1;
     end
 
-    // ---- X0 stage (youngest) ----
     if (inst_val_X0hl && rfA_wen_X0hl && rfA_waddr_X0hl != 5'd0) begin
       sb_pending  [rfA_waddr_X0hl] = 1'b1;
       sb_stage    [rfA_waddr_X0hl] = 5'b00001;
@@ -810,31 +784,30 @@ module parc_CoreCtrl
   reg       sb_opA1_stall;
 
   always @(*) begin
-    // defaults
     sb_opA0_byp_sel = am_r0;
     sb_opA0_stall   = 1'b0;
 
     if (rs_en && rs_issue != 5'd0 && sb_pending[rs_issue]) begin
       case (sb_stage[rs_issue])
-        5'b00001: begin  // X0
+        5'b00001: begin
           if (sb_is_load[rs_issue] || sb_is_muldiv[rs_issue])
             sb_opA0_stall = 1'b1;
           else
             sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BX0_byp : am_AX0_byp;
         end
-        5'b00010: begin  // X1
+        5'b00010: begin 
           if (sb_is_muldiv[rs_issue])
             sb_opA0_stall = 1'b1;
           else
             sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BX1_byp : am_AX1_byp;
         end
-        5'b00100: begin  // X2
+        5'b00100: begin
           if (sb_is_muldiv[rs_issue])
             sb_opA0_stall = 1'b1;
           else
             sb_opA0_byp_sel = sb_pipe[rs_issue] ? am_BX2_byp : am_AX2_byp;
         end
-        5'b01000: begin  // X3
+        5'b01000: begin
           if (sb_is_muldiv[rs_issue])
             sb_opA0_stall = 1'b1;
           else
